@@ -1,0 +1,1048 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Personal Manager — Single File (All-in-One)</title>
+
+  <!--
+    Single-file Personal Manager
+    - Semua dalam 1 file: HTML + CSS + JS
+    - Deploy GitHub Pages: commit file ke repo -> Settings -> Pages -> pilih branch (main) -> Save
+    - Dependensi CDN:
+        * Chart.js: https://cdn.jsdelivr.net/npm/chart.js
+        * SheetJS (xlsx): https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js
+        * docx (optional): https://cdn.jsdelivr.net/npm/docx@7.2.1/build/index.umd.min.js
+        * Feather icons: https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js
+    - Keamanan: data disimpan di localStorage per user (pm_user_{username}). Password disimpan sebagai SHA-256 hash.
+    - Demo user: username: demo, password: demo (dibuat otomatis jika belum ada user).
+    - Jika library tidak tersedia: fallback (CSV / TXT / JSON) disediakan.
+  -->
+
+  <!-- CDN Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/docx@7.2.1/build/index.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
+
+  <style>
+    :root{
+      --bg:#f7fafc; --card:#ffffff; --muted:#6b7280; --accent:#0ea5a4; --danger:#ef4444;
+      --radius:12px; --gap:12px; font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:#0f172a;line-height:1.4}
+    .wrap{max-width:980px;margin:0 auto;padding:14px}
+    header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+    h1{font-size:1.05rem;margin:0}
+    .small{font-size:0.85rem;color:var(--muted)}
+    .card{background:var(--card);border-radius:var(--radius);padding:12px;margin-bottom:12px;box-shadow:0 8px 20px rgba(2,6,23,0.04)}
+    input,select,textarea,button{font-family:inherit}
+    input,select,textarea{width:100%;padding:8px;border-radius:8px;border:1px solid #e6eef0;background:#fff}
+    button{background:var(--accent);color:#fff;border:0;padding:8px 10px;border-radius:8px;cursor:pointer}
+    button.ghost{background:transparent;color:var(--accent);border:1px solid rgba(14,165,164,0.12)}
+    nav.bottom{position:fixed;left:0;right:0;bottom:10px;margin:auto;max-width:980px;background:transparent;display:flex;gap:8px;z-index:60}
+    nav.bottom button{flex:1;border-radius:10px;padding:10px 6px;background:#fff;color:#0f172a;border:1px solid #eee;display:flex;flex-direction:column;align-items:center;gap:6px}
+    .hidden{display:none}
+    .row{display:flex;gap:8px}
+    .col{flex:1}
+    .center{display:flex;align-items:center;justify-content:center}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid #f1f5f9;text-align:left;font-size:0.9rem}
+    .profile-pic{width:56px;height:56px;border-radius:999px;object-fit:cover;background:#f3f4f6}
+    .badge{display:inline-block;padding:6px 8px;border-radius:999px;background:#eef7f7;color:var(--accent);font-weight:600;font-size:0.8rem}
+    .mini-calendar{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+    .day{padding:8px;border-radius:8px;text-align:center;background:#fff}
+    .day.today{outline:2px solid rgba(14,165,164,0.14)}
+    .task-done{text-decoration:line-through;color:var(--muted)}
+    footer.readme{font-size:0.78rem;color:var(--muted);margin-top:20px}
+    @media(min-width:820px){
+      nav.bottom{position:static;display:flex;margin-top:12px}
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <header>
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M12 2l3 6 6 .5-4.5 3.9L19 20l-7-4-7 4 .5-7.6L1 8.5 7 8 10 2z" fill="#0ea5a4"/></svg>
+      <div>
+        <h1>Personal Manager — All-in-One (single-file)</h1>
+        <div class="small">Mobile-first · Local-only · Siap deploy ke GitHub Pages</div>
+      </div>
+      <div style="margin-left:auto" id="auth-area"></div>
+    </header>
+
+    <!-- AUTH SCREEN -->
+    <div id="auth-screen" class="card">
+      <div id="auth-forms">
+        <div id="login-panel">
+          <h3>Masuk</h3>
+          <div class="small">Masuk dengan akun Anda</div>
+          <div style="margin-top:8px">
+            <input id="login-username" placeholder="Username" />
+            <input id="login-password" type="password" placeholder="Password" style="margin-top:8px" />
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <button id="btn-login">Login</button>
+              <button class="ghost" id="btn-open-register">Buat akun</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="register-panel" class="hidden">
+          <h3>Daftar</h3>
+          <div class="small">Buat akun baru (disimpan di localStorage)</div>
+          <div style="margin-top:8px">
+            <input id="reg-username" placeholder="Username (unik)" />
+            <input id="reg-name" placeholder="Nama lengkap" style="margin-top:8px" />
+            <input id="reg-password" type="password" placeholder="Password" style="margin-top:8px" />
+            <input id="reg-confirm" type="password" placeholder="Konfirmasi password" style="margin-top:8px" />
+            <div style="margin-top:8px;display:flex;gap:8px">
+              <button id="btn-register">Daftar</button>
+              <button class="ghost" id="btn-cancel-register">Batal</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="main-app" class="hidden">
+
+      <!-- DASHBOARD -->
+      <section id="dashboard" class="card">
+        <div class="row" style="align-items:center">
+          <div style="display:flex;gap:12px;align-items:center">
+            <img id="dash-avatar" class="profile-pic" src="" alt="avatar"/>
+            <div>
+              <div id="dash-name" style="font-weight:700">Nama Pengguna</div>
+              <div id="dash-contact" class="small"></div>
+            </div>
+          </div>
+          <div style="margin-left:auto" class="center">
+            <button id="btn-logout" class="ghost">Logout</button>
+          </div>
+        </div>
+
+        <div style="margin-top:12px" class="row">
+          <div class="card" style="flex:1;min-width:140px">
+            <div class="small">Saldo</div>
+            <div id="dash-saldo" style="font-size:1.1rem;font-weight:700">Rp 0</div>
+          </div>
+          <div class="card" style="flex:1;min-width:140px">
+            <div class="small">Tugas</div>
+            <div id="dash-tasks" style="font-weight:700">0 belum / 0 selesai</div>
+          </div>
+          <div class="card" style="flex:1;min-width:140px">
+            <div class="small">Agenda Hari Ini</div>
+            <div id="dash-agenda" style="font-weight:700">Tidak ada</div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <button id="quick-tx">Tambah Transaksi</button>
+          <button class="ghost" id="quick-task">Tambah Tugas</button>
+          <button class="ghost" id="quick-agenda">Tambah Agenda</button>
+          <button class="ghost" id="quick-export">Ekspor / Backup</button>
+        </div>
+      </section>
+
+      <!-- FINANCE -->
+      <section id="finance" class="card hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <h3 style="margin:0">Manajemen Keuangan</h3>
+            <div class="small">Tambah transaksi, filter, dan grafik</div>
+          </div>
+          <div class="small">Saldo: <strong id="finance-saldo">Rp 0</strong></div>
+        </div>
+
+        <div style="margin-top:10px" class="row">
+          <div class="col">
+            <select id="tx-type"><option value="income">Pemasukan</option><option value="expense">Pengeluaran</option></select>
+          </div>
+          <div class="col"><input id="tx-date" type="date"/></div>
+        </div>
+
+        <div style="margin-top:8px" class="row">
+          <div class="col"><input id="tx-amount" placeholder="Jumlah (angka)" inputmode="numeric" /></div>
+          <div class="col"><select id="tx-category"><option>Gaji</option><option>Makan</option><option>Transport</option><option>Belanja</option><option>Lainnya</option></select></div>
+        </div>
+
+        <div style="margin-top:8px">
+          <input id="tx-desc" placeholder="Deskripsi (opsional)" />
+          <div style="margin-top:8px;display:flex;gap:8px">
+            <button id="tx-add">Tambah</button>
+            <button class="ghost" id="tx-clear">Bersihkan</button>
+            <input id="tx-filter-date" type="date" style="margin-left:auto" />
+          </div>
+        </div>
+
+        <div style="margin-top:12px" class="card">
+          <canvas id="chart-categories" height="140"></canvas>
+        </div>
+
+        <div style="margin-top:8px" class="card">
+          <table>
+            <thead><tr><th>Tanggal</th><th>Jenis</th><th>Kategori</th><th>Jumlah</th><th>Deskripsi</th><th>Aksi</th></tr></thead>
+            <tbody id="tx-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- NOTES & TASKS -->
+      <section id="notes" class="card hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">Catatan & Tugas</h3>
+          <div class="small">Catatan singkat & daftar tugas</div>
+        </div>
+
+        <div style="margin-top:10px" class="row">
+          <div class="col"><input id="note-title" placeholder="Judul catatan" /></div>
+          <div class="col"><input id="note-body" placeholder="Isi singkat catatan" /></div>
+          <div><button id="note-add">Simpan</button></div>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap">
+          <div class="col card">
+            <h4 style="margin-top:0">Tugas</h4>
+            <div style="display:flex;gap:8px">
+              <input id="task-title" placeholder="Judul tugas" />
+              <input id="task-due" type="date" />
+              <button id="task-add">Tambah</button>
+            </div>
+            <div id="task-list" style="margin-top:10px"></div>
+          </div>
+
+          <div class="col card">
+            <h4 style="margin-top:0">Catatan Terakhir</h4>
+            <div id="notes-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- AGENDA -->
+      <section id="agenda" class="card hidden">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3 style="margin:0">Agenda & Jadwal</h3>
+          <div class="small">Klik tanggal untuk lihat agenda hari itu</div>
+        </div>
+
+        <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+          <input id="agenda-date" type="date" />
+          <input id="agenda-time" type="time" />
+          <input id="agenda-title" placeholder="Judul acara" />
+          <input id="agenda-loc" placeholder="Lokasi (opsional)" />
+          <button id="agenda-add">Tambah</button>
+        </div>
+
+        <div style="margin-top:12px">
+          <div id="mini-cal" class="mini-calendar"></div>
+        </div>
+
+        <div style="margin-top:10px" class="card">
+          <h4>Agenda tanggal <span id="agenda-selected-date">—</span></h4>
+          <div id="agenda-list"></div>
+        </div>
+      </section>
+
+      <!-- PROFILE -->
+      <section id="profile" class="card hidden">
+        <h3>Profil & Data Pribadi</h3>
+        <div class="small">Simpan informasi dasar</div>
+
+        <div style="margin-top:8px" class="row">
+          <div style="width:72px">
+            <img id="profile-img" class="profile-pic" src="" alt="avatar" />
+          </div>
+          <div class="col">
+            <input id="profile-name" placeholder="Nama lengkap" />
+            <input id="profile-address" placeholder="Alamat" style="margin-top:8px" />
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <input id="profile-phone" placeholder="No HP" />
+              <input id="profile-email" placeholder="Email" />
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+              <select id="profile-currency"><option>IDR</option><option>USD</option><option>EUR</option></select>
+              <input id="profile-photo" type="file" accept="image/*" />
+              <button id="profile-save">Simpan</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- EXPORT / IMPORT -->
+      <section id="export" class="card hidden">
+        <h3>Ekspor & Import</h3>
+        <div class="small">Backup, ekspor Excel/Word, import Excel (.xlsx)</div>
+
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap">
+          <button id="export-xlsx">Ekspor .xlsx (SheetJS)</button>
+          <button id="export-docx">Ekspor .docx (docx.js)</button>
+          <button id="export-json">Ekspor JSON (backup)</button>
+          <label class="ghost" style="padding:8px;border-radius:8px;cursor:pointer">
+            Import .xlsx / .json
+            <input id="import-file" type="file" accept=".xlsx,.json" style="display:none" />
+          </label>
+          <button id="clear-data" class="ghost">Hapus semua data akun (Reset)</button>
+        </div>
+
+        <div style="margin-top:8px" class="small muted">Jika library tidak tersedia, fallback akan digunakan (CSV/TXT).</div>
+      </section>
+
+      <footer class="readme card">
+        <div><strong>Catatan keamanan:</strong> Semua data disimpan di <code>localStorage</code> (client-only) dan dipisah per user dengan key <code>pm_user_{username}</code>. Password disimpan sebagai hash (SHA-256). Jangan simpan data sangat sensitif. Untuk keamanan lebih lanjut, gunakan enkripsi simetris + master password sebelum menyimpan (bisa saya bantu implementasikan).</div>
+      </footer>
+    </div>
+
+    <!-- bottom nav -->
+    <nav class="bottom" id="nav" style="display:none">
+      <button data-target="dashboard"><i data-feather="home"></i><div class="small">Dashboard</div></button>
+      <button data-target="finance"><i data-feather="dollar-sign"></i><div class="small">Finance</div></button>
+      <button data-target="notes"><i data-feather="clipboard"></i><div class="small">Notes</div></button>
+      <button data-target="agenda"><i data-feather="calendar"></i><div class="small">Agenda</div></button>
+      <button data-target="profile"><i data-feather="user"></i><div class="small">Profile</div></button>
+      <button data-target="export"><i data-feather="download"></i><div class="small">Export</div></button>
+    </nav>
+
+  </div>
+
+  <!-- Application Script (single-file, modular via IIFE) -->
+  <script>
+  (function(){
+    /* ============================
+       Utilities
+       ============================ */
+    const Utils = {
+      uid(){ return 'id' + Math.random().toString(36).slice(2,9) },
+      nowIso(){ return new Date().toISOString() },
+      todayIso(){ return new Date().toISOString().slice(0,10) },
+      fmtCurrency(v, cur='IDR'){
+        const n = Number(v) || 0;
+        if(cur === 'USD') return '$' + n.toLocaleString('en-US');
+        return 'Rp ' + n.toLocaleString('id-ID');
+      },
+      sha256Hex: async (text) => {
+        const enc = new TextEncoder();
+        const data = enc.encode(text);
+        const hash = await crypto.subtle.digest('SHA-256', data);
+        return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+      },
+      downloadBlob(filename, blob){
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url), 5000);
+      },
+      readFileAsArrayBuffer(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=e=>res(e.target.result); fr.onerror=rej; fr.readAsArrayBuffer(file); })},
+      readFileAsText(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=e=>res(e.target.result); fr.onerror=rej; fr.readAsText(file); })},
+      readFileAsDataURL(file){ return new Promise((res,rej)=>{ const fr=new FileReader(); fr.onload=e=>res(e.target.result); fr.onerror=rej; fr.readAsDataURL(file); })}
+    };
+
+    /* ============================
+       Storage keys & helpers
+       ============================ */
+    const Keys = {
+      userKey: (username)=>`pm_user_${username}`,
+      usersIndex: 'pm_users_index', // map username -> passHash
+      session: 'pm_current_user'
+    };
+
+    const Storage = {
+      getUsersIndex(){ try{ return JSON.parse(localStorage.getItem(Keys.usersIndex) || '{}'); }catch(e){return {} } },
+      saveUsersIndex(idx){ localStorage.setItem(Keys.usersIndex, JSON.stringify(idx)); },
+      saveUserObj(userObj){ localStorage.setItem(Keys.userKey(userObj.username), JSON.stringify(userObj)); },
+      loadUserObj(username){ try{ const raw = localStorage.getItem(Keys.userKey(username)); return raw ? JSON.parse(raw) : null; }catch(e){return null} },
+      setSession(username){ localStorage.setItem(Keys.session, username); },
+      getSession(){ return localStorage.getItem(Keys.session); },
+      clearSession(){ localStorage.removeItem(Keys.session); }
+    };
+
+    /* ============================
+       Initial demo data creator
+       ============================ */
+    function ensureDemoUser(){
+      const idx = Storage.getUsersIndex();
+      if(Object.keys(idx).length === 0){
+        (async ()=>{ 
+          const demoPassHash = await Utils.sha256Hex('demo');
+          idx['demo'] = demoPassHash;
+          Storage.saveUsersIndex(idx);
+          const demo = {
+            id: Utils.uid(),
+            username:'demo',
+            name:'Demo User',
+            passHash: demoPassHash,
+            createdAt: Utils.nowIso(),
+            profile: { name:'Demo User', address:'', phone:'081234567890', email:'demo@example.com', currency:'IDR', photo:'' },
+            transactions: [
+              {id:Utils.uid(), type:'income', date: Utils.todayIso(), amount:5000000, category:'Gaji', desc:'Gaji bulan ini'},
+              {id:Utils.uid(), type:'expense', date: Utils.todayIso(), amount:75000, category:'Makan', desc:'Makan siang'}
+            ],
+            tasks: [
+              {id:Utils.uid(), title:'Belajar JavaScript', due:'', done:false, createdAt:Utils.nowIso()},
+              {id:Utils.uid(), title:'Beli kebutuhan', due:Utils.todayIso(), done:false, createdAt:Utils.nowIso()}
+            ],
+            notes: [
+              {id:Utils.uid(), title:'Ide konten', body:'Buat tutorial deploy GitHub Pages', createdAt:Utils.nowIso()}
+            ],
+            agendas: [
+              {id:Utils.uid(), date:Utils.todayIso(), time:'15:00', title:'Ngopi bareng', desc:'Diskusi project', loc:'Kafe'}
+            ]
+          };
+          Storage.saveUserObj(demo);
+        })();
+      }
+    }
+
+    /* ============================
+       App State
+       ============================ */
+    let STATE = { currentUser: null, userObj: null, chart: null };
+
+    /* ============================
+       Auth Module
+       ============================ */
+    const Auth = {
+      async register(username, name, password){
+        if(!username || !password) throw new Error('Username & password diperlukan');
+        const idx = Storage.getUsersIndex();
+        if(idx[username]) throw new Error('Username sudah terdaftar');
+        const passHash = await Utils.sha256Hex(password);
+        idx[username] = passHash;
+        Storage.saveUsersIndex(idx);
+        const userObj = {
+          id: Utils.uid(),
+          username,
+          name: name || username,
+          passHash,
+          createdAt: Utils.nowIso(),
+          profile: { name: name || '', address:'', phone:'', email:'', currency:'IDR', photo:'' },
+          transactions: [], tasks: [], notes: [], agendas: []
+        };
+        Storage.saveUserObj(userObj);
+        Storage.setSession(username);
+        return userObj;
+      },
+      async login(username, password){
+        const idx = Storage.getUsersIndex();
+        if(!idx[username]) throw new Error('User tidak ditemukan');
+        const hash = await Utils.sha256Hex(password);
+        if(hash !== idx[username]) throw new Error('Password salah');
+        Storage.setSession(username);
+        return Storage.loadUserObj(username);
+      },
+      logout(){
+        Storage.clearSession();
+        STATE = { currentUser: null, userObj: null, chart: null };
+      },
+      loadCurrent(){
+        const username = Storage.getSession();
+        if(!username) return null;
+        const u = Storage.loadUserObj(username);
+        if(!u) { Storage.clearSession(); return null; }
+        STATE.currentUser = username; STATE.userObj = u; return u;
+      }
+    };
+
+    /* ============================
+       UI / DOM Helpers
+       ============================ */
+    const $ = (id)=>document.getElementById(id);
+    function show(el){ if(el) el.classList.remove('hidden'); }
+    function hide(el){ if(el) el.classList.add('hidden'); }
+
+    function toast(msg, t=2000){
+      const el = document.createElement('div');
+      el.textContent = msg;
+      el.style.position='fixed'; el.style.left='50%'; el.style.transform='translateX(-50%)';
+      el.style.bottom='110px'; el.style.background='#111'; el.style.color='#fff'; el.style.padding='8px 12px'; el.style.borderRadius='8px'; el.style.zIndex=9999;
+      document.body.appendChild(el);
+      setTimeout(()=>el.remove(), t);
+    }
+
+    /* ============================
+       Renderers
+       ============================ */
+    function renderAuthArea(){
+      const holder = $('auth-area');
+      if(!STATE.userObj){ holder.innerHTML = ''; return; }
+      holder.innerHTML = `<div style="display:flex;gap:8px;align-items:center">
+        <div style="text-align:right;margin-right:8px">
+          <div style="font-weight:700">${STATE.userObj.profile.name || STATE.userObj.username}</div>
+          <div class="small">${STATE.userObj.profile.email || STATE.userObj.profile.phone || ''}</div>
+        </div>
+        <img src="${STATE.userObj.profile.photo || ''}" alt="avatar" class="profile-pic" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2256%22 height=%2256%22><rect width=%2256%22 height=%2256%22 fill=%22%23f3f4f6%22/></svg>'"/>
+      </div>`;
+    }
+
+    function renderDashboard(){
+      if(!STATE.userObj) return;
+      $('dash-name').textContent = STATE.userObj.profile.name || STATE.userObj.username;
+      $('dash-contact').textContent = STATE.userObj.profile.email || STATE.userObj.profile.phone || '';
+      $('dash-avatar').src = STATE.userObj.profile.photo || '';
+      // saldo
+      const balance = STATE.userObj.transactions.reduce((s,t)=> s + (t.type === 'income' ? Number(t.amount) : -Number(t.amount)), 0);
+      $('dash-saldo').textContent = Utils.fmtCurrency(balance, STATE.userObj.profile.currency);
+      $('finance-saldo').textContent = Utils.fmtCurrency(balance, STATE.userObj.profile.currency);
+      // tasks
+      const total = STATE.userObj.tasks.length;
+      const done = STATE.userObj.tasks.filter(t=>t.done).length;
+      $('dash-tasks').textContent = `${total - done} belum / ${done} selesai`;
+      // agenda today
+      const today = Utils.todayIso();
+      const todays = STATE.userObj.agendas.filter(a=>a.date === today);
+      $('dash-agenda').textContent = todays.length ? todays.map(a=>a.title).join(', ') : 'Tidak ada';
+    }
+
+    function renderFinanceTable(filterDate){
+      const tbody = $('tx-table-body');
+      tbody.innerHTML = '';
+      let rows = STATE.userObj.transactions.slice().sort((a,b)=> b.date.localeCompare(a.date));
+      if(filterDate) rows = rows.filter(r=>r.date === filterDate);
+      rows.forEach(tx=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${tx.date}</td><td>${tx.type}</td><td>${tx.category}</td><td>${Utils.fmtCurrency(tx.amount, STATE.userObj.profile.currency)}</td><td>${tx.desc || ''}</td><td><button data-id="${tx.id}" class="tx-del">Hapus</button></td>`;
+        tbody.appendChild(tr);
+      });
+      // bind deletes
+      tbody.querySelectorAll('.tx-del').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          const id = e.target.dataset.id;
+          STATE.userObj.transactions = STATE.userObj.transactions.filter(t=>t.id !== id);
+          Storage.saveUserObj(STATE.userObj);
+          renderFinanceTable($('tx-filter-date').value || null);
+          renderDashboard();
+          renderChart();
+        });
+      });
+    }
+
+    function renderChart(){
+      // expense per category (pie) and weekly trend (line) if desired
+      const expenses = STATE.userObj.transactions.filter(t=>t.type === 'expense');
+      const byCat = {};
+      expenses.forEach(e=> byCat[e.category] = (byCat[e.category]||0) + Number(e.amount));
+      const labels = Object.keys(byCat);
+      const data = labels.map(l=>byCat[l]);
+      try{
+        if(STATE.chart) STATE.chart.destroy();
+      }catch(e){}
+      try{
+        const ctx = $('chart-categories').getContext('2d');
+        STATE.chart = new Chart(ctx, {
+          type: 'pie',
+          data: { labels, datasets: [{ data, backgroundColor: labels.map((_,i)=>`hsl(${i*60 % 360} 70% 60%)`)}] },
+          options: { responsive:true, maintainAspectRatio:false }
+        });
+      }catch(e){
+        console.warn('Chart render failed', e);
+      }
+    }
+
+    function renderNotes(){
+      const node = $('notes-list');
+      node.innerHTML = '';
+      STATE.userObj.notes.slice().reverse().forEach(n=>{
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `<strong>${n.title}</strong><div class="small">${n.createdAt}</div><div style="margin-top:6px">${n.body}</div>`;
+        node.appendChild(div);
+      });
+    }
+
+    function renderTasks(){
+      const node = $('task-list');
+      node.innerHTML = '';
+      STATE.userObj.tasks.forEach(t=>{
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div class="${t.done ? 'task-done' : ''}" style="font-weight:700">${t.title}</div>
+            <div class="small">${t.due || ''}</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button data-id="${t.id}" class="task-toggle">${t.done ? 'Undo' : 'Done'}</button>
+            <button data-id="${t.id}" class="task-del ghost">Hapus</button>
+          </div>
+        </div>`;
+        node.appendChild(div);
+      });
+      // bind
+      node.querySelectorAll('.task-toggle').forEach(b=> b.addEventListener('click', (e)=>{
+        const id = e.target.dataset.id;
+        STATE.userObj.tasks = STATE.userObj.tasks.map(t=> t.id===id ? Object.assign({}, t, {done: !t.done}) : t);
+        Storage.saveUserObj(STATE.userObj);
+        renderTasks(); renderDashboard();
+      }));
+      node.querySelectorAll('.task-del').forEach(b=> b.addEventListener('click', (e)=>{
+        const id = e.target.dataset.id;
+        STATE.userObj.tasks = STATE.userObj.tasks.filter(t=> t.id !== id);
+        Storage.saveUserObj(STATE.userObj);
+        renderTasks(); renderDashboard();
+      }));
+    }
+
+    /* mini calendar rendering */
+    function renderMiniCalendar(){
+      const cal = $('mini-cal');
+      cal.innerHTML = '';
+      const now = new Date();
+      const year = now.getFullYear(), month = now.getMonth();
+      const first = new Date(year, month, 1);
+      const startDay = first.getDay(); // 0-6 Sun..Sat
+      const daysInMonth = new Date(year, month+1, 0).getDate();
+      const cells = [];
+      for(let i=0;i<startDay;i++) cells.push('');
+      for(let d=1; d<=daysInMonth; d++) cells.push(d);
+      const today = Utils.todayIso();
+      cells.forEach(c=>{
+        if(c === ''){
+          const el = document.createElement('div'); el.className='day'; cal.appendChild(el);
+        } else {
+          const dateStr = new Date(year, month, c).toISOString().slice(0,10);
+          const has = STATE.userObj.agendas.some(a=>a.date===dateStr);
+          const el = document.createElement('div'); el.className = 'day' + (dateStr===today ? ' today' : '');
+          el.dataset.date = dateStr;
+          el.innerHTML = `<div style="font-weight:700">${c}</div>${has?'<div class="small muted">•</div>':''}`;
+          el.addEventListener('click', ()=> selectAgendaDate(dateStr));
+          cal.appendChild(el);
+        }
+      });
+    }
+
+    function selectAgendaDate(dateStr){
+      $('agenda-selected-date').textContent = dateStr;
+      const list = $('agenda-list');
+      list.innerHTML = '';
+      const items = STATE.userObj.agendas.filter(a=>a.date === dateStr).sort((a,b)=> (a.time||'').localeCompare(b.time||''));
+      if(items.length === 0) list.innerHTML = '<div class="small muted">Tidak ada agenda</div>';
+      items.forEach(a=>{
+        const div = document.createElement('div'); div.className='card';
+        div.innerHTML = `<div style="display:flex;justify-content:space-between">
+          <div><strong>${a.title}</strong><div class="small">${a.time || ''} ${a.loc? '· '+a.loc : ''}</div></div>
+          <div><button data-id="${a.id}" class="agenda-del">Hapus</button></div>
+        </div><div style="margin-top:6px">${a.desc || ''}</div>`;
+        list.appendChild(div);
+      });
+      list.querySelectorAll('.agenda-del').forEach(b=> b.addEventListener('click', (e)=>{
+        const id = e.target.dataset.id;
+        STATE.userObj.agendas = STATE.userObj.agendas.filter(x=> x.id !== id);
+        Storage.saveUserObj(STATE.userObj);
+        renderMiniCalendar(); selectAgendaDate(dateStr); renderDashboard();
+      }));
+    }
+
+    function renderProfile(){
+      const p = STATE.userObj.profile;
+      $('profile-img').src = p.photo || '';
+      $('profile-name').value = p.name || '';
+      $('profile-address').value = p.address || '';
+      $('profile-phone').value = p.phone || '';
+      $('profile-email').value = p.email || '';
+      $('profile-currency').value = p.currency || 'IDR';
+    }
+
+    /* ============================
+       UI event wiring
+       ============================ */
+    function bindAuthUI(){
+      $('btn-open-register').addEventListener('click', ()=>{ hide($('login-panel')); show($('register-panel')); });
+      $('btn-cancel-register').addEventListener('click', ()=>{ show($('login-panel')); hide($('register-panel')); });
+
+      $('btn-register').addEventListener('click', async ()=>{
+        const username = $('reg-username').value.trim();
+        const name = $('reg-name').value.trim();
+        const pw = $('reg-password').value;
+        const pw2 = $('reg-confirm').value;
+        if(!username || !pw){ toast('Username & password wajib'); return; }
+        if(pw !== pw2){ toast('Password tidak cocok'); return; }
+        try{
+          const user = await Auth.register(username, name, pw);
+          STATE.userObj = user; STATE.currentUser = username;
+          Storage.saveUserObj(user);
+          showMainApp();
+          initAfterLogin();
+          toast('Registrasi sukses & login otomatis');
+        }catch(err){ toast(err.message || 'Gagal registrasi') }
+      });
+
+      $('btn-login').addEventListener('click', async ()=>{
+        const username = $('login-username').value.trim();
+        const pw = $('login-password').value;
+        if(!username || !pw){ toast('Isi username & password'); return; }
+        try{
+          const user = await Auth.login(username, pw);
+          STATE.userObj = user; STATE.currentUser = username;
+          showMainApp();
+          initAfterLogin();
+          toast('Login sukses');
+        }catch(err){ toast(err.message || 'Gagal login') }
+      });
+
+      $('btn-logout').addEventListener('click', ()=>{
+        Auth.logout();
+        hideMainApp();
+        toast('Anda logout');
+      });
+    }
+
+    function bindNav(){
+      document.querySelectorAll('[data-target]').forEach(btn=>{
+        btn.addEventListener('click', ()=> {
+          const t = btn.dataset.target;
+          showSection(t);
+        });
+      });
+      // quick actions
+      $('quick-tx').addEventListener('click', ()=> { showSection('finance'); $('tx-amount').focus(); });
+      $('quick-task').addEventListener('click', ()=> { showSection('notes'); $('task-title').focus(); });
+      $('quick-agenda').addEventListener('click', ()=> { showSection('agenda'); $('agenda-title').focus(); });
+      $('quick-export').addEventListener('click', ()=> { showSection('export'); });
+    }
+
+    function bindFinance(){
+      $('tx-add').addEventListener('click', ()=>{
+        const type = $('tx-type').value;
+        const date = $('tx-date').value || Utils.todayIso();
+        const amount = Number($('tx-amount').value || 0);
+        const category = $('tx-category').value;
+        const desc = $('tx-desc').value.trim();
+        if(!amount || isNaN(amount)){ toast('Jumlah tidak valid'); return; }
+        const tx = { id: Utils.uid(), type, date, amount, category, desc, createdAt: Utils.nowIso() };
+        STATE.userObj.transactions.push(tx);
+        Storage.saveUserObj(STATE.userObj);
+        $('tx-amount').value=''; $('tx-desc').value=''; $('tx-date').value='';
+        renderFinanceTable(); renderChart(); renderDashboard();
+      });
+      $('tx-clear').addEventListener('click', ()=>{ $('tx-amount').value=''; $('tx-desc').value=''; $('tx-filter-date').value=''; renderFinanceTable(); });
+      $('tx-filter-date').addEventListener('change', ()=>{ renderFinanceTable($('tx-filter-date').value || null); });
+    }
+
+    function bindNotesTasks(){
+      $('note-add').addEventListener('click', ()=>{
+        const title = $('note-title').value.trim();
+        const body = $('note-body').value.trim();
+        if(!title || !body){ toast('Judul & isi catatan wajib'); return; }
+        STATE.userObj.notes.push({ id: Utils.uid(), title, body, createdAt: Utils.nowIso() });
+        Storage.saveUserObj(STATE.userObj);
+        $('note-title').value=''; $('note-body').value='';
+        renderNotes();
+      });
+
+      $('task-add').addEventListener('click', ()=>{
+        const title = $('task-title').value.trim();
+        const due = $('task-due').value || '';
+        if(!title){ toast('Judul tugas wajib'); return; }
+        STATE.userObj.tasks.push({ id: Utils.uid(), title, due, done:false, createdAt: Utils.nowIso() });
+        Storage.saveUserObj(STATE.userObj);
+        $('task-title').value=''; $('task-due').value='';
+        renderTasks(); renderDashboard();
+      });
+    }
+
+    function bindAgenda(){
+      $('agenda-add').addEventListener('click', ()=>{
+        const date = $('agenda-date').value || Utils.todayIso();
+        const time = $('agenda-time').value || '';
+        const title = $('agenda-title').value.trim();
+        const loc = $('agenda-loc').value.trim();
+        if(!title){ toast('Judul agenda wajib'); return; }
+        STATE.userObj.agendas.push({ id: Utils.uid(), date, time, title, desc:'', loc, createdAt: Utils.nowIso() });
+        Storage.saveUserObj(STATE.userObj);
+        $('agenda-title').value=''; $('agenda-loc').value=''; $('agenda-time').value=''; $('agenda-date').value='';
+        renderMiniCalendar(); renderDashboard();
+      });
+    }
+
+    function bindProfile(){
+      $('profile-photo').addEventListener('change', async (e)=>{
+        const f = e.target.files[0];
+        if(!f) return;
+        const dataUrl = await Utils.readFileAsDataURL(f);
+        $('profile-img').src = dataUrl;
+        // store in profile immediately
+        STATE.userObj.profile.photo = dataUrl;
+      });
+      $('profile-save').addEventListener('click', ()=>{
+        STATE.userObj.profile.name = $('profile-name').value.trim();
+        STATE.userObj.profile.address = $('profile-address').value.trim();
+        STATE.userObj.profile.phone = $('profile-phone').value.trim();
+        STATE.userObj.profile.email = $('profile-email').value.trim();
+        STATE.userObj.profile.currency = $('profile-currency').value;
+        Storage.saveUserObj(STATE.userObj);
+        renderDashboard(); renderProfile();
+        toast('Profil tersimpan');
+      });
+    }
+
+    function bindExportImport(){
+      // XLSX export
+      $('export-xlsx').addEventListener('click', ()=>{
+        if(window.XLSX){
+          const wb = XLSX.utils.book_new();
+          const tx = STATE.userObj.transactions.map(t=>({id:t.id,type:t.type,date:t.date,amount:t.amount,category:t.category,desc:t.desc}));
+          const tasks = STATE.userObj.tasks.map(t=>({id:t.id,title:t.title,due:t.due,done:t.done,createdAt:t.createdAt}));
+          const notes = STATE.userObj.notes.map(n=>({id:n.id,title:n.title,body:n.body,createdAt:n.createdAt}));
+          const agendas = STATE.userObj.agendas.map(a=>({id:a.id,date:a.date,time:a.time,title:a.title,loc:a.loc,createdAt:a.createdAt}));
+          const profile = [STATE.userObj.profile];
+          wb.SheetNames.push('transactions'); wb.Sheets['transactions'] = XLSX.utils.json_to_sheet(tx);
+          wb.SheetNames.push('tasks'); wb.Sheets['tasks'] = XLSX.utils.json_to_sheet(tasks);
+          wb.SheetNames.push('notes'); wb.Sheets['notes'] = XLSX.utils.json_to_sheet(notes);
+          wb.SheetNames.push('agendas'); wb.Sheets['agendas'] = XLSX.utils.json_to_sheet(agendas);
+          wb.SheetNames.push('profile'); wb.Sheets['profile'] = XLSX.utils.json_to_sheet(profile);
+          const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+          Utils.downloadBlob(`${STATE.currentUser}_backup.xlsx`, new Blob([wbout], {type:'application/octet-stream'}));
+        } else {
+          // fallback CSV transactions
+          const csv = STATE.userObj.transactions.map(t=>[t.date,t.type,t.category,t.amount,t.desc].map(x=>`"${String(x).replace(/"/g,'""')}"`).join(',')).join('\n');
+          Utils.downloadBlob(`${STATE.currentUser}_transactions.csv`, new Blob([csv], {type:'text/csv'}));
+          toast('SheetJS tidak tersedia — mengunduh CSV transaksi sebagai fallback');
+        }
+      });
+
+      // docx export (profile + monthly summary)
+      $('export-docx').addEventListener('click', ()=>{
+        if(window.docx && window.docx.Document){
+          const { Document, Packer, Paragraph, TextRun } = docx;
+          const doc = new Document();
+          const pTitle = new Paragraph({children:[ new TextRun({text:`Profil — ${STATE.userObj.profile.name || STATE.currentUser}`, bold:true, size:28}) ]});
+          const pContact = new Paragraph({children:[ new TextRun({text:`Email: ${STATE.userObj.profile.email || '-'}  Phone: ${STATE.userObj.profile.phone || '-'}`}) ]});
+          // monthly summary simple
+          const thisMonth = new Date().toISOString().slice(0,7);
+          const monthlyTx = STATE.userObj.transactions.filter(t=> t.date.startsWith(thisMonth));
+          const income = monthlyTx.filter(t=>t.type==='income').reduce((s,t)=>s+Number(t.amount),0);
+          const expense = monthlyTx.filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.amount),0);
+          const pSummary = new Paragraph({children:[ new TextRun({text:`Ringkasan ${thisMonth}: Pemasukan ${income}, Pengeluaran ${expense}`}) ]});
+          doc.addSection({children:[pTitle,pContact,pSummary]});
+          docx.Packer.toBlob(doc).then(blob=>{
+            Utils.downloadBlob(`${STATE.currentUser}_summary.docx`, blob);
+          });
+        } else {
+          const thisMonth = new Date().toISOString().slice(0,7);
+          const monthlyTx = STATE.userObj.transactions.filter(t=> t.date.startsWith(thisMonth));
+          const income = monthlyTx.filter(t=>t.type==='income').reduce((s,t)=>s+Number(t.amount),0);
+          const expense = monthlyTx.filter(t=>t.type==='expense').reduce((s,t)=>s+Number(t.amount),0);
+          const txt = `Profil: ${STATE.userObj.profile.name || STATE.currentUser}\nEmail: ${STATE.userObj.profile.email || ''}\nPhone: ${STATE.userObj.profile.phone || ''}\n\nRingkasan ${thisMonth}:\nPemasukan: ${income}\nPengeluaran: ${expense}\n\nSaldo saat ini: ${STATE.userObj.transactions.reduce((s,t)=> s + (t.type==='income'? Number(t.amount): -Number(t.amount)),0)}\n`;
+          Utils.downloadBlob(`${STATE.currentUser}_summary.txt`, new Blob([txt], {type:'text/plain'}));
+          toast('docx lib tidak tersedia — mengunduh TXT sebagai fallback');
+        }
+      });
+
+      // JSON backup
+      $('export-json').addEventListener('click', ()=>{
+        const copy = Object.assign({}, STATE.userObj);
+        const blob = new Blob([JSON.stringify(copy, null, 2)], {type:'application/json'});
+        Utils.downloadBlob(`${STATE.currentUser}_backup.json`, blob);
+      });
+
+      // import handler (xlsx or json)
+      $('import-file').addEventListener('change', async (e)=>{
+        const f = e.target.files[0];
+        if(!f) return;
+        if(f.name.endsWith('.json')){
+          try{
+            const txt = await Utils.readFileAsText(f);
+            const parsed = JSON.parse(txt);
+            // merge but keep username & passHash
+            parsed.username = STATE.userObj.username;
+            parsed.passHash = STATE.userObj.passHash;
+            Storage.saveUserObj(parsed);
+            STATE.userObj = parsed;
+            renderAllAfterDataChange();
+            toast('Restore JSON sukses');
+          }catch(err){ toast('JSON invalid') }
+        } else if(f.name.endsWith('.xlsx') || f.name.endsWith('.xls')){
+          if(!window.XLSX){ toast('SheetJS (XLSX) tidak tersedia'); return; }
+          try{
+            const ab = await Utils.readFileAsArrayBuffer(f);
+            const wb = XLSX.read(ab, {type:'array'});
+            // attempt to import 'transactions' sheet
+            const sheetNames = wb.SheetNames;
+            let txSheet = wb.Sheets['transactions'] || wb.Sheets[sheetNames[0]];
+            if(txSheet){
+              const data = XLSX.utils.sheet_to_json(txSheet);
+              const txs = data.map(r=>({
+                id: Utils.uid(),
+                type: (r.type || '').toLowerCase() === 'expense' ? 'expense' : (r.type || '').toLowerCase() === 'income' ? 'income' : (Number(r.amount) < 0 ? 'expense' : 'income'),
+                date: r.date || Utils.todayIso(),
+                amount: Number(r.amount || r.amount_usd || 0),
+                category: r.category || 'Lainnya',
+                desc: r.desc || r.description || ''
+              }));
+              STATE.userObj.transactions = STATE.userObj.transactions.concat(txs);
+              Storage.saveUserObj(STATE.userObj);
+              renderAllAfterDataChange();
+              toast('Import transaksi sukses');
+            } else toast('Tidak menemukan sheet transaksi pada file');
+          }catch(err){ console.error(err); toast('Gagal impor XLSX') }
+        } else toast('Format file tidak didukung');
+        e.target.value = '';
+      });
+
+      // clear all data for current user (reset)
+      $('clear-data').addEventListener('click', ()=>{
+        if(!confirm('Hapus semua data akun ini? (tidak bisa dibatalkan)')) return;
+        const savedUsers = Storage.getUsersIndex();
+        const username = STATE.currentUser;
+        // keep user index and passHash but reset userObj
+        const passHash = savedUsers[username];
+        const newObj = {
+          id: Utils.uid(),
+          username,
+          name: username,
+          passHash,
+          createdAt: Utils.nowIso(),
+          profile: { name:'', address:'', phone:'', email:'', currency:'IDR', photo:'' },
+          transactions: [], tasks: [], notes: [], agendas: []
+        };
+        Storage.saveUserObj(newObj);
+        STATE.userObj = newObj;
+        renderAllAfterDataChange();
+        toast('Data akun direset');
+      });
+    }
+
+    /* ============================
+       Helpers: show/hide main parts
+       ============================ */
+    function showMainApp(){
+      hide($('auth-screen')); show($('main-app')); $('nav').style.display='flex'; feather.replace();
+    }
+    function hideMainApp(){
+      show($('auth-screen')); hide($('main-app')); $('nav').style.display='none'; feather.replace();
+    }
+    function showSection(name){
+      ['dashboard','finance','notes','agenda','profile','export'].forEach(s=>{
+        const el = $(s);
+        if(!el) return;
+        if(s === name) el.classList.remove('hidden'); else el.classList.add('hidden');
+      });
+    }
+
+    /* ============================
+       Initializers after login
+       ============================ */
+    function initAfterLogin(){
+      renderAuthArea();
+      renderAllAfterDataChange();
+      bindAppInteractionsOnce();
+    }
+
+    let appBindingsDone = false;
+    function bindAppInteractionsOnce(){
+      if(appBindingsDone) return;
+      appBindingsDone = true;
+      bindNav();
+      bindFinance();
+      bindNotesTasks();
+      bindAgenda();
+      bindProfile();
+      bindExportImport();
+
+      // bottom nav click - show the sections
+      document.querySelectorAll('nav.bottom button').forEach(b=>{
+        b.addEventListener('click', ()=> showSection(b.dataset.target));
+      });
+
+      // quick navigation from dashboard buttons
+      $('quick-tx').addEventListener('click', ()=> { showSection('finance'); $('tx-amount').focus(); });
+      $('quick-task').addEventListener('click', ()=> { showSection('notes'); $('task-title').focus(); });
+      $('quick-agenda').addEventListener('click', ()=> { showSection('agenda'); $('agenda-title').focus(); });
+      $('quick-export').addEventListener('click', ()=> { showSection('export'); $('export-xlsx').focus(); });
+    }
+
+    /* ============================
+       Render everything when data changes
+       ============================ */
+    function renderAllAfterDataChange(){
+      renderDashboard();
+      renderFinanceTable();
+      renderChart();
+      renderNotes();
+      renderTasks();
+      renderMiniCalendar();
+      renderProfile();
+    }
+
+    /* ============================
+       App boot sequence
+       ============================ */
+    document.addEventListener('DOMContentLoaded', async ()=>{
+      ensureDemoUser();
+
+      // wire auth buttons
+      bindAuthUI();
+
+      // attempt auto-login
+      const current = Auth.loadCurrent();
+      if(current){
+        // set state
+        STATE.userObj = current;
+        STATE.currentUser = current.username;
+        showMainApp();
+        initAfterLogin();
+        toast('Login otomatis: ' + STATE.currentUser);
+      } else {
+        // show auth panel
+        hide($('main-app'));
+        show($('auth-screen'));
+      }
+
+      // wire top-level handlers
+      feather.replace();
+    });
+
+    /* ============================
+       Utility: render finance table initial
+       ============================ */
+    function renderFinanceTable(filterDate = null){
+      if(!STATE.userObj) return;
+      renderFinanceTable = function(filterDate = null){}; // placeholder to avoid function hoisting confusion
+    }
+
+    // define correctly after declaration to avoid hoisting confusion
+    renderFinanceTable = function(filterDate = null){
+      if(!STATE.userObj) return;
+      $('tx-table-body').innerHTML = '';
+      let rows = STATE.userObj.transactions.slice().sort((a,b)=> b.date.localeCompare(a.date));
+      if(filterDate) rows = rows.filter(r=> r.date === filterDate);
+      rows.forEach(tx=>{
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${tx.date}</td><td>${tx.type}</td><td>${tx.category}</td><td>${Utils.fmtCurrency(tx.amount, STATE.userObj.profile.currency)}</td><td>${tx.desc || ''}</td><td><button data-id="${tx.id}" class="tx-del">Hapus</button></td>`;
+        $('tx-table-body').appendChild(tr);
+      });
+      // bind deletes
+      $('tx-table-body').querySelectorAll('.tx-del').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          const id = e.target.dataset.id;
+          STATE.userObj.transactions = STATE.userObj.transactions.filter(t=> t.id !== id);
+          Storage.saveUserObj(STATE.userObj);
+          renderFinanceTable($('tx-filter-date').value || null);
+          renderChart(); renderDashboard();
+        });
+      });
+    };
+
+    /* ============================
+       Final small init: toggle sections when logged in
+       ============================ */
+    // show dashboard by default when logged in
+    (function attachDefaultNav(){
+      // Ensure nav buttons switch sections
+      document.addEventListener('click', (e)=>{
+        const t = e.target.closest('[data-target]');
+        if(t) showSection(t.dataset.target);
+      });
+    })();
+
+    // expose a few functions for console/debug (optional)
+    window.pm = {
+      Utils, Storage, Auth, STATE
+    };
+
+  })();
+  </script>
+</body>
+</html>
